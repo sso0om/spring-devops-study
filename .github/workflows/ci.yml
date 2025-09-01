@@ -9,21 +9,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+
     services:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
           MYSQL_DATABASE: study
           MYSQL_USER: study
-          MYSQL_PASSWORD: ${{ env.MYSQL_PASSWORD }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping -u study -p${{ env.MYSQL_PASSWORD }}"
+          --health-cmd "mysqladmin ping -u study -p$MYSQL_PASSWORD"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
