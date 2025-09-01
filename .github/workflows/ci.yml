@@ -63,3 +63,35 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose down -v
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Changing to app directory..."
+            cd /home/ubuntu/your-app-directory || exit 1
+            
+            echo "Pulling latest code..."
+            git pull origin main
+            
+            echo "Creating .env file..."
+            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" > .env
+            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
+            echo "MYSQL_DATABASE=study" >> .env
+            echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
+            
+            echo "Building and starting Docker containers..."
+            docker compose up --build -d --force-recreate
+            
+            echo "Deployment finished successfully!"
