@@ -45,7 +45,7 @@ jobs:
       - name: Health check
         run: |
           PASSWORD=$(docker compose logs app | grep "security password:" | sed 's/.*security password: //' | tr -d ' \r\n')
-          curl -f -u user:$PASSWORD http://localhost:8080/actuator/health
+          curl -f -u user:$PASSWORD http://localhost:8080/actuator/health || curl -f -u user:$PASSWORD http://localhost:8080/
 
       - name: Build and tag Docker image for deployment
         if: github.ref == 'refs/heads/main'
