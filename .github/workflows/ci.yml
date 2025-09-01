@@ -9,6 +9,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: mydb
+          MYSQL_USER: user
+          MYSQL_PASSWORD: pass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -u user -p pass"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -26,3 +41,17 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build -x test --no-daemon
         shell: bash
+
+      - name: Build Docker Image
+        run: docker build -t spring-app .
+      - name: Run Docker Compose
+        run: docker-compose up --build -d
+
+      - name: Wait for App to be ready
+        run: |
+          echo "Waiting for Spring Boot app to be ready..."
+          sleep 20
+          curl -f http://localhost:8080/actuator/health
+
+      - name: Tear down Docker Compose
+        run: docker-compose down -v
