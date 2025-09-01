@@ -9,21 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_DATABASE: study
-          MYSQL_USER: study
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -u study -p$MYSQL_PASSWORD"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -43,27 +28,43 @@ jobs:
         run: ./gradlew build -x test --no-daemon
         shell: bash
 
-      - name: Install docker-compose
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-
       - name: Build Docker Image
         run: docker build -t spring-app .
 
-      - name: Run Docker Compose
+      - name: Start services with Docker Compose
         env:
           MYSQL_USER: ${{ secrets.MYSQL_USER }}
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
           MYSQL_DATABASE: study
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-        run: docker-compose up --build -d
+        run: docker compose up --build -d
 
       - name: Wait for App to be ready
         run: |
+          echo "Waiting for MySQL to be ready..."
+          timeout 60 bash -c 'until docker compose exec -T db mysqladmin ping --silent; do echo "Waiting for MySQL..."; sleep 3; done'
+          
           echo "Waiting for Spring Boot app to be ready..."
-          sleep 20
-          curl -f http://localhost:8080/actuator/health
+          timeout 60 bash -c 'until curl -f http://localhost:8080/actuator/health >/dev/null 2>&1; do echo "Waiting for Spring Boot..."; sleep 3; done'
+          
+          echo "All services are ready!"
 
-      - name: Tear down Docker Compose
-        run: docker-compose down -v
+      - name: Show service logs (for debugging)
+        if: failure()
+        run: |
+          echo "=== MySQL logs ==="
+          docker compose logs db
+          echo "=== Spring App logs ==="
+          docker compose logs app
+
+      - name: Run health check
+        run: |
+          echo "Testing application health..."
+          curl -f http://localhost:8080/actuator/health
+          echo "Health check passed!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+          docker system prune -f
