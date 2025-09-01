@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -25,42 +25,77 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build -x test --no-daemon
+        run: ./gradlew build --no-daemon
         shell: bash
 
-      - name: Install docker-compose
+      - name: Check .env file creation
         run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+          echo "Creating .env file..."
+          echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" > .env
+          echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
+          echo "MYSQL_DATABASE=study" >> .env
+          echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
+          echo ".env file created:"
+          ls -la .env
+          echo "Content check (without sensitive data):"
+          echo "MYSQL_DATABASE=study" 
+          echo "Other variables are set but hidden for security"
 
       - name: Build Docker Image
         run: docker build -t spring-app .
 
-      - name: Run Docker Compose
-        env:
-          MYSQL_USER: ${{ secrets.MYSQL_USER }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          MYSQL_DATABASE: study
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-        run: docker-compose up --build -d
-
-      - name: Wait for App to be ready
+      - name: Start services with Docker Compose
         run: |
-          echo "Waiting for Spring Boot app to be ready..."
-          max_retries=60
-          retries=0
-          while [ $retries -lt $max_retries ]; do
-            if curl -f http://localhost:8080/actuator/health; then
-              echo "Spring Boot app is ready!"
-              exit 0
-            fi
-            echo "Waiting for Spring Boot app..."
-            sleep 1
-            retries=$((retries+1))
-          done
-          echo "Spring Boot app failed to start in time."
-          exit 1
+          echo "Starting services..."
+          docker compose up --build -d
+          echo "Services started, checking status:"
+          docker compose ps
 
-      - name: Tear down Docker Compose
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for MySQL to be ready..."
+          timeout 60 bash -c 'until docker compose exec -T db mysqladmin ping --silent; do echo "Waiting for MySQL..."; sleep 3; done'
+          echo "MySQL is ready!"
+          
+          echo "Checking if Spring Boot app container is running..."
+          docker compose ps
+          
+          echo "Checking Spring Boot app logs..."
+          docker compose logs app
+          
+          echo "Waiting for Spring Boot app to be ready..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/actuator/health >/dev/null 2>&1; do echo "Waiting for Spring Boot..."; sleep 5; done'
+          
+          echo "All services are ready!"
+
+      - name: Show service logs (for debugging)
+        if: failure()
+        run: |
+          echo "=== MySQL logs ==="
+          docker compose logs db
+          echo "=== Spring App logs ==="
+          docker compose logs app
+
+      - name: Run health check
+        run: |
+          echo "Testing application health..."
+          curl -f http://localhost:8080/actuator/health
+          echo "Health check passed!"
+
+      - name: Build and tag Docker image for deployment
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker build -t spring-app:${{ github.sha }} .
+          docker build -t spring-app:latest .
+
+      - name: Deploy to AWS EC2
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # AWS 배포 로직이 들어갈 곳
+          echo "Deployment step will be implemented here"
+
+      - name: Cleanup
         if: always()
-        run: docker-compose down -v
+        run: |
+          docker compose down -v
+          docker system prune -f
