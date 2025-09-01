@@ -13,9 +13,10 @@ jobs:
       mysql:
         image: mysql:8
         env:
-          MYSQL_DATABASE: mydb
-          MYSQL_USER: user
-          MYSQL_PASSWORD: pass
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: study
+          MYSQL_USER: study
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
         ports:
           - 3306:3306
         options: >-
