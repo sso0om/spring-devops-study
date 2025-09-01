@@ -26,115 +26,26 @@ jobs:
 
       - name: Build with Gradle
         run: ./gradlew build --no-daemon
-        shell: bash
 
-      - name: Check .env file creation
+      - name: Create .env file
         run: |
-          echo "Creating .env file..."
           echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" > .env
           echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
           echo "MYSQL_DATABASE=study" >> .env
           echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
-          echo ".env file created:"
-          ls -la .env
-          echo "Content check (without sensitive data):"
-          echo "MYSQL_DATABASE=study" 
-          echo "Other variables are set but hidden for security"
 
-      - name: Build Docker Image
-        run: |
-          echo "Building Docker image with Java 21..."
-          docker build -t spring-app . --build-arg JAVA_VERSION=21
+      - name: Start services
+        run: docker compose up --build -d
 
-      - name: Start services with Docker Compose
+      - name: Wait for services
         run: |
-          echo "Starting services..."
-          docker compose up --build -d
-          echo "Services started, checking status:"
-          docker compose ps
+          timeout 60 bash -c 'until docker compose exec -T db mysqladmin ping --silent; do sleep 3; done'
+          sleep 30
 
-      - name: Wait for services to be ready
+      - name: Health check
         run: |
-          echo "Waiting for MySQL to be ready..."
-          timeout 60 bash -c 'until docker compose exec -T db mysqladmin ping --silent; do echo "Waiting for MySQL..."; sleep 3; done'
-          echo "MySQL is ready!"
-          
-          echo "=== DEBUGGING SPRING BOOT ==="
-          echo "Container status:"
-          docker compose ps
-          
-          echo "Spring Boot logs:"
-          docker compose logs app
-          
-          echo "Container inspect:"
-          docker inspect spring-app || echo "Container not found"
-          
-          echo "Port check:"
-          netstat -tlnp | grep 8080 || echo "Port 8080 not in use"
-          
-          echo "=== Trying different health checks ==="
-          
-          # Try root endpoint first (no auth needed usually)
-          echo "Testing root endpoint..."
-          if timeout 10 bash -c 'curl -f http://localhost:8080/ >/dev/null 2>&1'; then
-            echo "✅ Root endpoint accessible!"
-          else
-            echo "Root endpoint needs auth, trying with generated password..."
-            # Extract password from logs
-            PASSWORD=$(docker compose logs app | grep "security password:" | sed 's/.*security password: //' | tr -d ' \r\n')
-            echo "Found password: ${PASSWORD:0:4}****"
-            if [ ! -z "$PASSWORD" ]; then
-              timeout 10 bash -c "curl -f -u user:$PASSWORD http://localhost:8080/ >/dev/null 2>&1" && echo "✅ Authenticated access works!"
-            fi
-          fi
-          
-          # Try actuator with auth
-          echo "Testing actuator endpoint..."
           PASSWORD=$(docker compose logs app | grep "security password:" | sed 's/.*security password: //' | tr -d ' \r\n')
-          if [ ! -z "$PASSWORD" ]; then
-            if timeout 10 bash -c "curl -f -u user:$PASSWORD http://localhost:8080/actuator/health >/dev/null 2>&1"; then
-              echo "✅ Actuator health check passed with auth!"
-              curl -u user:$PASSWORD http://localhost:8080/actuator/health
-            else
-              echo "Actuator still not accessible, but app is running!"
-            fi
-          fi
-          
-          echo "App is definitely running - proceeding with success! 🎉"
-
-      - name: Show service logs (for debugging)
-        if: failure()
-        run: |
-          echo "=== MySQL logs ==="
-          docker compose logs db
-          echo "=== Spring App logs ==="
-          docker compose logs app
-
-      - name: Run health check (flexible)
-        run: |
-          echo "=== FINAL HEALTH CHECK ==="
-          
-          # Extract Spring Security password
-          PASSWORD=$(docker compose logs app | grep "security password:" | sed 's/.*security password: //' | tr -d ' \r\n')
-          echo "Spring Security is enabled, extracted password: ${PASSWORD:0:4}****"
-          
-          # Try authenticated actuator check
-          if curl -f -u user:$PASSWORD http://localhost:8080/actuator/health >/dev/null 2>&1; then
-            echo "✅ Actuator health check passed!"
-            curl -u user:$PASSWORD http://localhost:8080/actuator/health | jq '.' || curl -u user:$PASSWORD http://localhost:8080/actuator/health
-          elif curl -f -u user:$PASSWORD http://localhost:8080/ >/dev/null 2>&1; then
-            echo "✅ Root endpoint accessible with auth!"
-          elif nc -z localhost 8080; then
-            echo "✅ Port 8080 is responding!"
-          else
-            echo "❌ App not responding, but containers are running..."
-          fi
-          
-          echo ""
-          echo "🎉 CI/CD Pipeline completed successfully!"
-          echo "✅ MySQL: Running and healthy"
-          echo "✅ Spring Boot: Started successfully"  
-          echo "✅ All services: Up and running"
+          curl -f -u user:$PASSWORD http://localhost:8080/actuator/health
 
       - name: Build and tag Docker image for deployment
         if: github.ref == 'refs/heads/main'
@@ -145,11 +56,9 @@ jobs:
       - name: Deploy to AWS EC2
         if: github.ref == 'refs/heads/main'
         run: |
-          # AWS 배포 로직이 들어갈 곳
-          echo "Deployment step will be implemented here"
+          # TODO: AWS 배포 로직
+          echo "Ready for deployment"
 
       - name: Cleanup
         if: always()
-        run: |
-          docker compose down -v
-          docker system prune -f
+        run: docker compose down -v
