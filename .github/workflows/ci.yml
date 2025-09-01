@@ -80,7 +80,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Changing to app directory..."
-            cd /home/ubuntu/your-app-directory || exit 1
+            cd /home/ubuntu/spring-devops-study || exit 1
             
             echo "Pulling latest code..."
             git pull origin main
