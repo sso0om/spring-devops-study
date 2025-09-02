@@ -4,8 +4,11 @@ services:
   db:
     image: mysql:8
     container_name: mysql-1
-    env_file:
-      - .env
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: study
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -17,7 +20,7 @@ services:
       retries: 5
 
   app:
-    build: .
+    image: ${DOCKER_USERNAME}/spring-devops-study:latest  # 빌드된 이미지 사용
     container_name: spring-app
     ports:
       - "8080:8080"
@@ -25,7 +28,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/study?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
