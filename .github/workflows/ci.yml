@@ -51,11 +51,60 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # 이미지 다운로드
+            # 1. 이전 컨테이너 중지 및 삭제 (오류 방지)
+            docker-compose down || true
+            docker rm -f spring-app mysql-1 || true
+            
+            # 2. 새로운 docker-compose.yml 파일 생성
+            # 환경 변수를 직접 삽입하여 파일 생성
+            # ${{ secrets.DOCKER_USERNAME }} 대신 실제 Docker Hub 사용자명을 사용해야 합니다.
+            cat <<EOF > docker-compose.yml
+            version: '3.8'
+            
+            services:
+              db:
+                image: mysql:8
+                container_name: mysql-1
+                environment:
+                  MYSQL_USER: \${MYSQL_USER}
+                  MYSQL_PASSWORD: \${MYSQL_PASSWORD}
+                  MYSQL_DATABASE: study
+                  MYSQL_ROOT_PASSWORD: \${MYSQL_ROOT_PASSWORD}
+                ports:
+                  - "3306:3306"
+                volumes:
+                  - mysql_data:/var/lib/mysql
+                healthcheck:
+                  test: ["CMD", "mysqladmin", "ping", "-u", "\${MYSQL_USER}", "-p\${MYSQL_PASSWORD}"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+            
+              app:
+                image: ${{ secrets.DOCKER_USERNAME }}/spring-devops-study:latest
+                container_name: spring-app
+                ports:
+                  - "8080:8080"
+                depends_on:
+                  db:
+                    condition: service_healthy
+                environment:
+                  SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/study?useSSL=false&allowPublicKeyRetrieval=true
+                  SPRING_DATASOURCE_USERNAME: \${MYSQL_USER}
+                  SPRING_DATASOURCE_PASSWORD: \${MYSQL_PASSWORD}
+                  SPRING_JPA_HIBERNATE_DDL_AUTO: update
+            
+            volumes:
+              mysql_data:
+            EOF
+            
+            # 3. 새로운 Docker 이미지 다운로드
             docker pull ${{ secrets.DOCKER_USERNAME }}/spring-devops-study:latest
             
-            # 기존 컨테이너 중지
-            docker-compose down || true
-            
-            # 새 컨테이너 실행
-            docker-compose up -d
+            # 4. .env 파일이 존재하는지 확인하고 Docker Compose 실행
+            if [ -f .env ]; then
+              docker-compose up -d
+            else
+              echo "Error: .env file not found. Please create one on the EC2 instance."
+              exit 1
+            fi
