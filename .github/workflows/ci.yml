@@ -51,14 +51,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # 최신 docker-compose.yml 다운로드
-            curl -o docker-compose.yml https://raw.githubusercontent.com/${{ secrets.GITHUB_USERNAME }}/spring-devops-study/main/docker-compose.yml
-            
             # 이미지 다운로드
             docker pull ${{ secrets.DOCKER_USERNAME }}/spring-devops-study:latest
             
             # 기존 컨테이너 중지
-            docker compose down || true
+            docker-compose down || true
             
             # 새 컨테이너 실행
-            docker compose up -d
+            docker-compose up -d
