@@ -56,8 +56,6 @@ jobs:
             docker rm -f spring-app mysql-1 || true
             
             # 2. 새로운 docker-compose.yml 파일 생성
-            # 환경 변수를 직접 삽입하여 파일 생성
-            # ${{ secrets.DOCKER_USERNAME }} 대신 실제 Docker Hub 사용자명을 사용해야 합니다.
             cat <<EOF > docker-compose.yml
             version: '3.8'
             
